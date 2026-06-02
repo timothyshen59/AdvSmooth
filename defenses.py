@@ -8,18 +8,33 @@ def _optim(cfg, model):
     return torch.optim.Adam(model.parameters(), lr=cfg.lr)
  
  
+def _attack_kwargs(config, train_attack_config):
+    if train_attack_config is not None:
+        if hasattr(train_attack_config, "items"):
+            return dict(train_attack_config)
+        return vars(train_attack_config)
 
-def train_adversarial(config, model, loader, epochs, device, train_attack_config):
+    return {
+        "epsilon": config.train_epsilon,
+        "k": config.train_attack_steps,
+        "a": config.train_step_size,
+        "random_start": True,
+        "loss_func": "xent",
+    }
+
+
+def train_adversarial(config, model, loader, device, train_attack_config=None):
     optimizer = _optim(config, model) 
+    attack_kwargs = _attack_kwargs(config, train_attack_config)
 
 
     for epoch in range(config.epochs):
         model.train()
         total_loss = 0.0
         total = 0
-        attack = L2PGDAttack(model, train_attack_config)
+        attack = L2PGDAttack(model, **attack_kwargs)
 
-        for x, y in tqdm(loader, desc=f"defense train epoch {epoch + 1}/{epochs}"):
+        for x, y in tqdm(loader, desc=f"l2 defense train {epoch + 1}/{config.epochs}"):
             x, y = x.to(device), y.to(device)
             x_adv = attack.perturb(x, y)
 
@@ -31,7 +46,7 @@ def train_adversarial(config, model, loader, epochs, device, train_attack_config
 
             total_loss += loss.item() * y.numel()
             total += y.numel()
-        print(f"defense epoch={epoch + 1} loss={total_loss / total:.4f}")
+        print(f"[l2_defense] epoch={epoch + 1}/{config.epochs} loss={total_loss / total:.4f}")
 
 
 def train_standard(config, model, loader, device): 
@@ -73,5 +88,3 @@ def train_gaussian(config, model, loader, device):
             
         print(f"[rand_smooth] Epoch: {epoch+1}/{config.epochs}| Loss: {loss.item():.3f}")
         
-
-
