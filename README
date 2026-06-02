@@ -1,2 +1,2 @@
-To run with cifar: python3 run_results.py --dataset cifar
+To run with cifar: python3 run_results.py --dataset cifar10
 To run with mnist: python3 run_results.py --dataset mnist
