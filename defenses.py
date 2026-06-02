@@ -79,7 +79,8 @@ def train_gaussian(config, model, loader, device):
     for epoch in range(config.epochs): 
         for x,y in loader: 
             x,y = x.to(device), y.to(device) 
-            x_noisy = (x + torch.randn_like(x) * config.sigma) #TODO: Check rescaling and pixel value range 
+            # applies pertubation to the input
+            x_noisy = (x + torch.randn_like(x) * config.sigma) 
             optimizer.zero_grad()
             
             loss = F.cross_entropy(model(x_noisy), y) 
