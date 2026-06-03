@@ -1,5 +1,6 @@
 import argparse
 import torch
+import torch.nn.functional as F 
 from tqdm import tqdm
 
 
@@ -23,7 +24,41 @@ def accuracy(model, loader, device, attack=None):
         total += y.numel()
     return correct / total
  
- 
+
+
+def accuracy_with_class_conf(model, loader, device, attack=None, num_classes=10):
+    model.eval()
+    correct = 0
+    total = 0
+    
+    confidence_sum = torch.zeros(num_classes)
+    class_cnt = torch.zeros(num_classes)
+    
+    for x, y in tqdm(loader, desc="accuracy", leave=False):
+        x, y = x.to(device), y.to(device)
+        if attack is not None:
+            x = attack.perturb(x, y)
+        with torch.no_grad():
+            logits = model(x)
+            probs = F.softmax(logits, dim=1)
+            pred = logits.argmax(1)
+            true_prob = probs.gather(1, y.view(-1,1)).squeeze(1)
+            
+        correct += (pred == y).sum().item()
+        total += y.numel()
+        
+        #Count counfidence score 
+        for c in range(num_classes): 
+            mask = (y==c)
+            if mask.any(): 
+                confidence_sum[c] += true_prob[mask].sum().item()
+                class_cnt[c] += mask.sum().item()
+    
+    per_class_confidence = (confidence_sum / class_cnt.clamp(min=1)).tolist()
+    return correct / total, per_class_confidence
+
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dataset", default="cifar10", choices=["mnist", "cifar10"])
@@ -31,7 +66,7 @@ def main():
     #Seeding 
     ap.add_argument("--seed", type=int, default=42)  
     #Training 
-    ap.add_argument("--epochs", type=int, default=40)
+    ap.add_argument("--epochs", type=int, default=2)
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--sigma", type=float, default=0.25)
     # Certification

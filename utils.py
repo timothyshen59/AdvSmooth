@@ -29,7 +29,7 @@ def get_device(requested="auto"):
     return torch.device(requested)
 
 
-def get_data(dataset, data_dir="./data", batch_size=128, train_limit=None, test_limit=None, num_workers=0):
+def get_data(dataset, data_dir="./data", batch_size=128, num_workers=0):
     if dataset == "mnist":
         transform = transforms.ToTensor()
         train_split = datasets.MNIST(data_dir, train=True, download=True, transform=transform)
@@ -39,7 +39,6 @@ def get_data(dataset, data_dir="./data", batch_size=128, train_limit=None, test_
         transform = transforms.Compose(
             [
                 transforms.ToTensor(),
-                transforms.Normalize(mean=[0.4914, 0.4822, 0.4465], std=[0.2023, 0.1994, 0.2010]),
             ]
         )
         train_split = datasets.CIFAR10(data_dir, train=True, download=True, transform=transform)
@@ -48,10 +47,6 @@ def get_data(dataset, data_dir="./data", batch_size=128, train_limit=None, test_
     else:
         raise ValueError(f"unsupported dataset: {dataset}")
 
-    if train_limit is not None:
-        train_split = Subset(train_split, range(min(train_limit, len(train_split))))
-    if test_limit is not None:
-        test_split = Subset(test_split, range(min(test_limit, len(test_split))))
 
     train_loader = DataLoader(train_split, batch_size=batch_size, shuffle=True, num_workers=num_workers)
     test_loader = DataLoader(test_split, batch_size=batch_size, shuffle=False, num_workers=num_workers)

@@ -25,7 +25,6 @@ class SmallCNN(nn.Module):
         with torch.no_grad(): 
             flattened_dim = nn.Sequential(*conv_layers)(dummy_input).flatten(1).shape[1]
         
-        
         self.net = nn.Sequential(
             *conv_layers, 
             nn.Flatten(), 

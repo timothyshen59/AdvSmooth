@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F 
 from tqdm import tqdm
 
-from attacks import L2PGDAttack
+from attacks import L2PGDAttack, EOTPGDL2
 
 def _optim(cfg, model):
     return torch.optim.Adam(model.parameters(), lr=cfg.lr)
@@ -26,14 +26,21 @@ def _attack_kwargs(config, train_attack_config):
 def train_adversarial(config, model, loader, device, train_attack_config=None):
     optimizer = _optim(config, model) 
     attack_kwargs = _attack_kwargs(config, train_attack_config)
+    
+    if config.adv_attack == "pgd_l2":
+        print("\n===== PGD L2 Attack======")
+        attack = L2PGDAttack(model, **attack_kwargs)
 
+    elif config.adv_attack == "eot":
+        print("\n===== EOT PGD L2 Attack======")
+        attack = EOTPGDL2(model, sigma = config.sigma, m=config.eot_samples,**attack_kwargs)
 
     for epoch in range(config.epochs):
         model.train()
         total_loss = 0.0
         total = 0
-        attack = L2PGDAttack(model, **attack_kwargs)
 
+    
         for x, y in tqdm(loader, desc=f"l2 defense train {epoch + 1}/{config.epochs}"):
             x, y = x.to(device), y.to(device)
             x_adv = attack.perturb(x, y)
