@@ -26,34 +26,44 @@ def accuracy(model, loader, device, attack=None):
  
 
 
-def accuracy_with_class_conf(model, loader, device, attack=None, num_classes=10):
+def accuracy_with_class_conf(model, loader, device, attack=None, num_classes=10,
+                             smoothed=False, sigma=0.25, n_smooth=64):
     model.eval()
     correct = 0
     total = 0
-    
+
     confidence_sum = torch.zeros(num_classes)
     class_cnt = torch.zeros(num_classes)
-    
+
     for x, y in tqdm(loader, desc="accuracy", leave=False):
         x, y = x.to(device), y.to(device)
         if attack is not None:
-            x = attack.perturb(x, y)
+            x = attack.perturb(x, y)            # attack g (EOT) -- before scoring
+
         with torch.no_grad():
-            logits = model(x)
-            probs = F.softmax(logits, dim=1)
-            pred = logits.argmax(1)
-            true_prob = probs.gather(1, y.view(-1,1)).squeeze(1)
-            
+            if smoothed:
+                #g classsifer 
+                probs = torch.zeros(x.size(0), num_classes, device=device)
+                for _ in range(n_smooth):
+                    noise = torch.randn_like(x) * sigma      # same noise convention as training/certify
+                    probs += F.softmax(model(x + noise), dim=1)
+                probs /= n_smooth
+            else:
+                #f classifier 
+                probs = F.softmax(model(x), dim=1)
+
+            pred = probs.argmax(1)
+            true_prob = probs.gather(1, y.view(-1, 1)).squeeze(1)
+
         correct += (pred == y).sum().item()
         total += y.numel()
-        
-        #Count counfidence score 
-        for c in range(num_classes): 
-            mask = (y==c)
-            if mask.any(): 
+
+        for c in range(num_classes):
+            mask = (y == c)
+            if mask.any():
                 confidence_sum[c] += true_prob[mask].sum().item()
                 class_cnt[c] += mask.sum().item()
-    
+
     per_class_confidence = (confidence_sum / class_cnt.clamp(min=1)).tolist()
     return correct / total, per_class_confidence
 

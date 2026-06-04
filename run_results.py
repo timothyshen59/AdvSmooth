@@ -1,4 +1,5 @@
 import argparse
+import torch 
 from types import SimpleNamespace
 
 from attacks import EOTPGDL2, L2PGDAttack
@@ -11,6 +12,8 @@ from results_csv import append_run_csv
 
 def make_attack(attack_type, model, epsilon, attack_steps, step_size, sigma, m): 
     if attack_type == "pgd_l2": 
+        print("\n===L2 PGD Attack  ===")
+
         output_attack =  L2PGDAttack(
             model,
             epsilon=epsilon,
@@ -19,6 +22,8 @@ def make_attack(attack_type, model, epsilon, attack_steps, step_size, sigma, m):
             random_start=True,
         )
     elif attack_type == "eot": 
+        print("\n===PGD EOT Attack  ===")
+
         output_attack = EOTPGDL2(
             model,
             epsilon=epsilon,
@@ -43,7 +48,7 @@ def train_single(config, model, loader, device):
         print("\n=== Randomized Smooth Training for Model ===")
         train_gaussian(config, model, loader, device)
 
-    else: 
+    if not config.adv_training and not config.smooth_training: 
         print("\n=== Standard Training for Model ===")
         train_standard(config, model, loader, device)
 
@@ -52,7 +57,7 @@ def train_single(config, model, loader, device):
   
 def main():
     parser = argparse.ArgumentParser(description="Train and evaluate a single defended model.")
-    parser.add_argument("--dataset", choices=["mnist", "cifar10"], default="cifar10")
+    parser.add_argument("--dataset", choices=["mnist", "cifar10"], default="mnist")
     parser.add_argument("--data-dir", default="./data")
     parser.add_argument("--device", default="auto")
     parser.add_argument("--seed", type=int, default=42)
@@ -70,16 +75,16 @@ def main():
     parser.add_argument("--eval-attack", choices=["none", "pgd_l2", "eot"], default="eot",
                         help="attack applied to inputs at evaluation; 'none' = clean run")
  
-    parser.add_argument("--epsilon", type=float, default=0.1, help="L2 PGD evaluation radius")
+    parser.add_argument("--epsilon", type=float, default=1.0, help="L2 PGD evaluation radius")
     parser.add_argument("--attack-steps", type=int, default=20)
-    parser.add_argument("--step-size", type=float, default=0.0625)
-    parser.add_argument("--train-epsilon", type=float, default=0.5)
+    parser.add_argument("--step-size", type=float, default=0.125)
+    parser.add_argument("--train-epsilon", type=float, default=1.0)
     parser.add_argument("--train-attack-steps", type=int, default=20)
-    parser.add_argument("--train-step-size", type=float, default=0.0625)
-    parser.add_argument("--eot-samples", type=int, default=8)
+    parser.add_argument("--train-step-size", type=float, default=0.125)
+    parser.add_argument("--eot-samples", type=int, default=16)
  
     parser.add_argument("--sigma", type=float, default=0.25)
-    parser.add_argument("--certify-limit", type=int, default=500)
+    parser.add_argument("--certify-limit", type=int, default=2000)
     parser.add_argument("--radius", type=float, default=0.5)
     parser.add_argument("--n0", type=int, default=100)
     parser.add_argument("--n", type=int, default=1000)
@@ -87,6 +92,14 @@ def main():
     parser.add_argument("--certify-batch", type=int, default=128)
     parser.add_argument("--cert-csv", default="certification_rows.csv")
     parser.add_argument("--results-csv", default="runs.csv", help="append one row per run")
+    
+    # 
+    parser.add_argument("--run-name", default="eps1.0-m-at-rs", help="Name to save run")
+    parser.add_argument("--training",default=False, help= "Do we train or not")
+    parser.add_argument("--load-model",default=True, help= "Load model or not ")
+    parser.add_argument("--checkpoint",default=True, help= "Checkpoint model or not ")
+
+    
     args = parser.parse_args()
  
     set_seed(args.seed)
@@ -105,17 +118,30 @@ def main():
     model = SmallCNN(channels, num_classes,size).to(device) 
     cfg = SimpleNamespace(**vars(args))
 
-    print("\n===Training===")
-    train_single(cfg, model, train_loader, device)
+    if args.training: 
+        print("\n===Training===")
+        train_single(cfg, model, train_loader, device)
+        
     
+    if args.training and args.checkpoint: 
+        print(f"\n Saving model to {args.run_name} ")
+        torch.save(model.state_dict(), f"checkpoints/{args.run_name}.pth")
+
     eval_attack = None
     if cfg.eval_attack != "none":
         eval_attack = make_attack(cfg.eval_attack, model, cfg.epsilon,
                                   cfg.attack_steps, cfg.step_size, cfg.sigma, cfg.eot_samples)
     
     print("\n=== Accuracy + per-class confidence ===")
+    
+    if args.load_model: 
+        print(f"======Loading Model from {args.run_name}========")
+        ckpt_path = f"checkpoints/{args.run_name}.pth"
+        model.load_state_dict(torch.load(ckpt_path, map_location=device))
+    
+    
     acc, per_class_conf = accuracy_with_class_conf(
-        model, test_loader, device, attack=eval_attack, num_classes=num_classes)
+        model, test_loader, device, attack=eval_attack, num_classes=num_classes, smoothed=args.smooth_training)
     mean_conf = sum(per_class_conf) / len(per_class_conf)
     print(f"{'accuracy':24s}: {acc:.4f}  (eval_attack={cfg.eval_attack})")
     print(f"{'mean true-label conf':24s}: {mean_conf:.4f}")

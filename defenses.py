@@ -87,7 +87,7 @@ def train_gaussian(config, model, loader, device):
         for x,y in loader: 
             x,y = x.to(device), y.to(device) 
             # applies pertubation to the input
-            x_noisy = (x + torch.randn_like(x) * config.sigma) 
+            x_noisy = (x + torch.randn_like(x) * config.sigma) .clamp(0, 1)
             optimizer.zero_grad()
             
             loss = F.cross_entropy(model(x_noisy), y) 
