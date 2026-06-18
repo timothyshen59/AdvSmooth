@@ -1,4 +1,4 @@
-# Randomized Smoothing for L2 Robustness
+# Adversarial Smoothing for L2 Robustness
 
 A PyTorch implementation of randomized smoothing for certifying L2 robustness 
 of neural networks, with support for adversarial training and EOT-PGD evaluation.
